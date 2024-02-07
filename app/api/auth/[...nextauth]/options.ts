@@ -1,41 +1,41 @@
-/* tslint ignore */
+import type { NextAuthOptions } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials';
+import GoogleProvider from 'next-auth/providers/google';
+import FacebookProvider from 'next-auth/providers/facebook';
 import prisma from '../../../../lib/prisma';
-import {hashSync, compareSync} from "bcrypt"
 
-export const options = {
+export const options: NextAuthOptions = {
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    }),
     Credentials({
-      id: 'credentials',
-      credentials: {},
-      async authorize(credentials: {
-          firstName: string,
-          lastName: string,
-          email: string,
-          password: string,
-          subscribe: boolean
-      }) {
-        const currentUser: { email: string, password: string } = await prisma.user.findFirst({
+      id: 'signin',
+      credentials: {
+        email: { label: "email", type: "text"},
+        password: {  label: "Password", type: "password" }
+      },
+      authorize: async (credentials) => {
+        if (!credentials?.email || !credentials?.password ) {
+           throw new Error('Enter the valid data')
+        }
+
+        const user = await prisma.user.findFirst({
           where: {
             email: credentials?.email,
           },
         });
 
-        if (!currentUser) {
-          return { error:  "User is not fount"};
-        }
-
-        const isValid = compareSync(
-          credentials.password,
-          currentUser.password,
-        )
-
-        if (!isValid) {
-          return { error:  "Enter the correct password"}
+        if (user) {
+          if (user.password !== credentials.password) {
+            throw new Error('Enter the correct password')
+          }
+          return Promise.resolve(user);
         } else {
-          return { error:  ""} as any;
+          throw new Error('User not found')
         }
-      }
+      },
     }),
     Credentials({
       id: 'signup',
@@ -50,21 +50,15 @@ export const options = {
         password: {label: 'password', type: 'password', required: true},
         subscribe: {label: 'subscribe', type: 'boolean', required: true},
       },
-      authorize: async (credentials: {
-          firstName: string,
-          lastName: string,
-          email: string,
-          password: string,
-          subscribe: boolean
-      }) => {
-        const currentUser: { email: string }= await prisma.user.findFirst({
+      authorize: async (credentials) => {
+        const currentUser = await prisma.user.findFirst({
           where: {
             email: credentials?.email,
           },
         });
 
         if (currentUser) {
-          return  {error: 'User already exist'}
+          throw new Error('User already exist');
         }
 
         const userResponse = await prisma.user.create({
@@ -72,30 +66,16 @@ export const options = {
             firstName: credentials?.firstName,
             lastName: credentials?.lastName,
             email: credentials?.email,
-            password: hashSync(credentials?.password, 7),
+            password: credentials?.password as string,
             subscribe: !!credentials?.subscribe
           }
         });
 
-        const {password, ...newUser} = userResponse;
-        if (!newUser) {
-          throw new Error('Please try again');
-        }
-
-        return newUser;
-      }
-    } as any),
+        return userResponse;
+      },
+    }),
   ],
-  callbacks: {
-    async signIn({ user, account, profile, email, credentials }) {
-      if(user?.error) {
-        throw new Error(user.error)
-      }
-
-      return user;
-    }
-  },
   pages: {
-    signIn: '/auth/sign-in'
+    signIn: '/auth/sign-in',
   }
 }
