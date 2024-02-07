@@ -72,7 +72,7 @@ const SignUp = () => {
             width={384}
             height={953}
             alt="Main image"
-            className="w-full h-[200px] lg:h-full  object-cover"
+            className="w-full h-[200px] lg:h-full object-cover"
           />
         </div>
       </div>
